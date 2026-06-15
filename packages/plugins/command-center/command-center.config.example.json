@@ -1,0 +1,8 @@
+{
+  "//": "Plugin instance config. Solo mode is ON by default: list ONE agent as ceo and it self-staffs every other role (engineer/qa/researcher/marketer) with that same session, each running the right stack. Set `defaultGoalId` to hang all dispatched work under a goal (or omit).",
+  "defaultGoalId": "REPLACE_WITH_A_GOAL_ID_OR_OMIT_THIS_LINE",
+  "roster": [
+    { "role": "ceo", "agentId": "REPLACE_WITH_YOUR_CLAUDE_CODE_AGENT_ID" }
+  ],
+  "//roster-full": "To give roles their own dedicated agents instead of solo self-staffing, list them explicitly and (optionally) pick a stack: [ {\"role\":\"ceo\",\"agentId\":\"...\"}, {\"role\":\"engineer\",\"agentId\":\"...\",\"stackId\":\"engineer-codex\"}, {\"role\":\"qa\",\"agentId\":\"...\"} ]"
+}
