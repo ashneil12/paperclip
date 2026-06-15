@@ -1,0 +1,32 @@
+{
+  "name": "@ash/command-center",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A chatable CEO command center over Paperclip: a CEO agent that decomposes, dispatches to a governed fleet, auto-injects per-role stacks (OperatorOS for the CEO), and verifies its own work.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "tsx harness/demo.ts",
+    "build": "node esbuild.config.mjs"
+  },
+  "//": "In-tree build: worker boots via the real @paperclipai/plugin-sdk runWorker; types still come from src/sdk (a faithful structural mirror). To fully de-shim, rename shim type refs to the SDK's (Issue, IssueComment.authorType, etc.).",
+  "paperclipPlugin": {
+    "manifest": "./dist/host/manifest.js",
+    "worker": "./dist/host/worker.js",
+    "ui": "./dist/ui/"
+  },
+  "dependencies": {
+    "@paperclipai/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "@types/react": "^19.0.8",
+    "esbuild": "^0.28.0",
+    "react": "^19.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.8"
+  }
+}
