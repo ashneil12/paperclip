@@ -17,7 +17,7 @@ Verify in ~30s — all four must stay green before and after any change:
 ```bash
 pnpm install
 pnpm typecheck   # tsc --noEmit → clean
-pnpm test        # vitest → 26 passing / 8 files
+pnpm test        # vitest → 43 passing / 11 files
 pnpm demo        # prints the full CEO loop end-to-end (in-memory host)
 pnpm build       # esbuild → dist/host/{worker,manifest}.js + dist/ui/index.js
 ```
@@ -32,11 +32,11 @@ If any of those is red, fix it before doing anything else.
 | V3 role stacks | `src/stacks/` | `operatoros-stack.ts` (real OperatorOS persona), `role-stacks.ts` (registry + built-ins), `stack-injector.ts` (connect→inject) |
 | Org | `src/org/org.ts` | The roster: role → bound agent + stack |
 | Brain | `src/brain/` | `planner` (decompose), `router` (route+dispatch), `autonomy` (act-then-report gate), `monitor`, `reporter`, `run` (the resumable reducer), `ceo` (orchestrator) |
-| V2 QA gate | `src/qa/verify-gate.ts` | spawn QA, collect verdict, refuse "done" on FAIL. Two-lane: deterministic gate (Playwright + `@clerk/testing` + `toHaveScreenshot`) is authoritative; Midscene `ADVISORY:` lane never blocks. QA member equipped via `skills/qa-verify-gate/SKILL.md`. |
+| V2 QA gate | `src/qa/verify-gate.ts`, `src/qa/gate-scaffold.ts` | spawn QA, collect verdict, refuse "done" on FAIL. Two-lane: deterministic gate (Playwright + `@clerk/testing` + `toHaveScreenshot`) is authoritative; Midscene `ADVISORY:` lane never blocks. `gate-scaffold.ts` emits the real harness as a path→contents map. **Self-healing:** a FAIL auto-reworks (re-dispatch with findings, `maxRework` default 2) in `src/brain/run.ts`. QA member equipped via `skills/qa-verify-gate/SKILL.md`. |
 | V1 memory | `src/memory/memory-store.ts` | transcript + compaction |
 | Host bindings | `src/host/` | `manifest`, `worker` (/chat,/poll,/roster routes), `hands-paperclip` (→ ctx.issues), `state-store` (→ ctx.state), `llm-claude` (the claude CLI) |
 | UI | `src/ui/` | `agent-adapters.ts` (ported verbatim from hivra), `CeoChat.tsx`, `index.tsx` |
-| Harness/tests | `harness/`, `test/` | in-memory fakes + the runnable demo + 26 specs |
+| Harness/tests | `harness/`, `test/` | in-memory fakes + the runnable demo + 43 specs across 11 files |
 | SDK shim | `src/sdk/index.ts` | faithful mirror of `@paperclipai/plugin-sdk` (swap for the real dep in-tree) |
 | Design + critique | `docs/PLAN.md` | the grounded plan and its adversarial review |
 | Overview | `README.md` | human-facing summary + drop-in instructions |
@@ -51,7 +51,7 @@ If any of those is red, fix it before doing anything else.
    — that's what preserves budget / checkout / approval / audit.
 3. **`create` then explicit `wakeTask`.** Creating a task does NOT auto-wake the
    assignee (verified upstream). Always wake explicitly.
-4. **Keep all 26 tests green.** Add tests for new behavior. The tests are the spec.
+4. **Keep all tests green.** Add tests for new behavior. The tests are the spec.
 5. **Additive only.** When integrating in-tree, never edit Paperclip core; this
    ships as a plugin. The one allowed in-core seam (live streaming) is a documented
    future Platform Module.
@@ -79,6 +79,10 @@ Checked against the real upstream clone at **`~/Projects/paperclip`** (origin
   agent to that role (config roster `stackId`, or `OrgBuilder.connect`). The stack
   auto-injects as `assigneeAdapterOverrides` on dispatch. The CEO routes to it once
   the role has a member.
+- **Equip the QA gate:** the verifier's methodology is `skills/qa-verify-gate/SKILL.md`;
+  `src/qa/gate-scaffold.ts` emits the real Playwright + `@clerk/testing` + Midscene
+  files for a target repo. A QA FAIL auto-reworks — tune the attempt budget with
+  `RunDeps.maxRework` (default 2). Built-in roles include a `designer` stack.
 - **Change how the CEO plans:** `src/brain/planner.ts` (LLM-first with a
   deterministic heuristic fallback). Keep the heuristic working — tests pin it.
 - **Tune autonomy:** `src/brain/autonomy.ts` (what's reversible vs governance-gated).

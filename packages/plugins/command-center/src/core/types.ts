@@ -180,6 +180,10 @@ export interface RunState {
   verdicts: Record<string, QAVerdict>;
   /** taskId -> spawned QA issue id. */
   qaIssues: Record<string, string>;
+  /** taskId -> count of QA-fail auto-rework attempts spent (V2.1 self-healing gate). */
+  reworks?: Record<string, number>;
+  /** taskId -> rework brief appended to the next dispatch (the QA findings to fix). */
+  reworkNotes?: Record<string, string>;
   /** Tasks held at the autonomy gate. */
   gated: Array<{ taskId: string; reason: string }>;
   awaitingHuman: boolean;

@@ -34,6 +34,8 @@ interface StoredIssue {
 export interface FakeHandsConfig {
   /** Global QA verdict the fake QA worker returns. */
   qa?: "pass" | "fail";
+  /** Fail the FIRST N QA verdicts, then pass — to exercise the auto-rework loop. */
+  qaFailFirst?: number;
   /** originIds whose worker should report `failed` instead of `done`. */
   failTasks?: Set<string>;
 }
@@ -48,6 +50,7 @@ export class FakeHands implements Hands {
   readonly comments = new Map<string, HandsComment[]>();
   readonly wakeups: string[] = [];
   readonly asks: AskRecord[] = [];
+  private qaRuns = 0;
 
   constructor(
     private readonly newId: IdGen,
@@ -118,7 +121,9 @@ export class FakeHands implements Hands {
   private runWorker(issue: StoredIssue): void {
     const kind = issue.originKind ?? "";
     if (kind.endsWith(":qa")) {
-      const pass = (this.config.qa ?? "pass") === "pass";
+      this.qaRuns += 1;
+      const failFirst = this.config.qaFailFirst ?? 0;
+      const pass = failFirst > 0 ? this.qaRuns > failFirst : (this.config.qa ?? "pass") === "pass";
       this.post(issue, issue.assigneeAgentId, pass ? "VERDICT: PASS\n- All acceptance criteria verified against the running app." : "VERDICT: FAIL\n- Criterion 2 not satisfied: empty-state copy missing.");
       issue.status = "done";
       return;

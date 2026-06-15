@@ -8,20 +8,23 @@ a Paperclip plugin — the fork stays a thin deploy wrapper.
 
 The thing you asked for: **connect a Claude Code as the CEO and the OperatorOS
 stack drops in automatically**; give every other member its own stack (engineer →
-Codex, QA → Playwright + `@clerk/testing` gate with a Midscene advisory lane, etc.).
+Codex, QA → Playwright + `@clerk/testing` gate with a Midscene advisory lane,
+designer → design-system stack, etc.).
 
 ## Status: V0–V3 built, typechecked, tested, and runnable
 
 ```bash
 pnpm install
 pnpm typecheck   # tsc --noEmit — clean
-pnpm test        # vitest — 26 passing across 8 files
+pnpm test        # vitest — 43 passing across 11 files
 pnpm demo        # runs the whole CEO loop end-to-end against an in-memory host
 ```
 
-`pnpm demo` shows: V3 role-stack injection, V0 decompose→dispatch→report through
-the seam, V1 live events + cross-turn memory, V2 the QA gate (pass **and** fail),
-and the autonomy gate holding a destructive objective for you.
+`pnpm demo` shows: V3 role-stack injection across the full roster (incl. the
+designer), V0 decompose→dispatch→report through the seam, V1 live events +
+cross-turn memory, V2 the QA gate (pass, exhaust-reworks-and-refuse, and
+**self-healing** fail→fix→pass), and the autonomy gate holding a destructive
+objective for you.
 
 ## Architecture — Brain on Hands
 
@@ -57,7 +60,8 @@ runs against the in-memory harness (tests/demo) and the real Paperclip host.
 
 - **V0** — decompose → dispatch (create + explicit wake) → monitor → report. Buffered `/chat` + `/poll` (plugin API routes are JSON-only; no streaming).
 - **V1** — durable memory + compaction (`ctx.state`), live event feed, resumable dispatch/poll cycle (`RunState`), non-blocking ticks.
-- **V2** — the QA verify gate: auto-spawn a QA task, only accept on `VERDICT: PASS`, route FAIL to rework. Two-lane — a REQUIRED deterministic check (Playwright + `@clerk/testing` + `toHaveScreenshot`) is authoritative; a Midscene `ADVISORY:` lane is reported but never blocks. Equipped via the `qa-verify-gate` skill.
+- **V2** — the QA verify gate: auto-spawn a QA task, only accept on `VERDICT: PASS`. Two-lane — a REQUIRED deterministic check (Playwright + `@clerk/testing` + `toHaveScreenshot`) is authoritative; a Midscene `ADVISORY:` lane is reported but never blocks. Equipped via the `qa-verify-gate` skill; `src/qa/gate-scaffold.ts` emits the real harness for a target repo.
+- **V2.1** — **self-healing rework loop**: a QA FAIL auto-re-dispatches the task to its role with the findings baked into the brief, then re-verifies — up to `maxRework` (default 2) before settling as failed. The CEO stops at "needs you" only when the gate can't be satisfied autonomously.
 - **V3** — **role stacks**: each role is a bundle (persona + skills + tools + adapter + model + memory + autonomy). Connecting an agent to a role injects its stack as Paperclip `assigneeAdapterOverrides` on every dispatched task. CEO seat → OperatorOS. Same role can run different stacks (engineer-claude vs engineer-codex).
 
 ## Connect agents to roles (the roster)
@@ -72,7 +76,8 @@ Plugin instance config:
     { "role": "engineer",   "agentId": "agent_codex", "stackId": "engineer-codex" },
     { "role": "qa",         "agentId": "agent_qa" },
     { "role": "researcher", "agentId": "agent_research" },
-    { "role": "marketer",   "agentId": "agent_marketer" }
+    { "role": "marketer",   "agentId": "agent_marketer" },
+    { "role": "designer",   "agentId": "agent_designer" }
   ]
 }
 ```

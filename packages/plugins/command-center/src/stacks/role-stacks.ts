@@ -100,6 +100,19 @@ export const MARKETER_STACK: RoleStack = {
   autonomy: "act-then-report",
 };
 
+export const DESIGNER_STACK: RoleStack = {
+  id: "designer",
+  role: "designer",
+  displayName: "Designer",
+  persona: `You are a product designer on an agent team. You receive a task with acceptance criteria from the CEO. Produce the smallest design that satisfies them: layout, the key states (empty / loading / error / success), UI copy, and a component + CSS spec a frontend engineer can implement directly. Match the existing design system — do not invent a new visual language. Apply the anti-AI-writing rules to any UI copy (no em-dashes, no "it's not X it's Y", no buzzwords). Deliver the spec, the states, and one annotated mock or screenshot as the artifact. If a product decision only the operator can make is in the way, state it in one sentence instead of guessing.`,
+  skills: ["design-system", "ui-copy"],
+  tools: ["fs.read", "fs.write", "browser.drive", "issue.comments.create"],
+  adapterKind: "claude",
+  model: "claude-opus-4-8",
+  memory: { retainTurns: 6, summarizeAfterTurns: 16 },
+  autonomy: "act-then-report",
+};
+
 const BUILT_IN: RoleStack[] = [
   CEO_STACK,
   ENGINEER_STACK,
@@ -107,6 +120,7 @@ const BUILT_IN: RoleStack[] = [
   QA_STACK,
   RESEARCHER_STACK,
   MARKETER_STACK,
+  DESIGNER_STACK,
 ];
 
 /**

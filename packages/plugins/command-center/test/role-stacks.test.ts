@@ -32,4 +32,14 @@ describe("V3 — role stacks", () => {
     const reg = new StackRegistry();
     expect(reg.defaultStackFor("engineer").id).toBe("engineer-claude-code");
   });
+
+  it("ships a built-in designer stack as the default for the designer role", () => {
+    const reg = new StackRegistry();
+    const designer = reg.defaultStackFor("designer");
+    expect(designer.id).toBe("designer");
+    expect(designer.displayName).toBe("Designer");
+    const conn = connectAgentToRole(reg, { role: "designer", agentId: "d1" });
+    expect(conn.overrides.systemPromptAppend).toContain("product designer");
+    expect(conn.overrides.skills).toContain("design-system");
+  });
 });

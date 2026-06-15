@@ -3,14 +3,16 @@
  * Run: pnpm demo
  *
  * Shows: V3 role-stack injection (connect a Claude Code as CEO -> OperatorOS drops
- * in), V0 decompose+dispatch+report through the governed seam, V1 live events +
- * cross-turn memory, V2 the QA verify gate (pass AND fail), and the autonomy gate
- * pausing on a destructive objective.
+ * in) across the full roster incl. the designer, V0 decompose+dispatch+report
+ * through the governed seam, V1 live events + cross-turn memory, V2 the QA verify
+ * gate (pass, exhaust-reworks-and-refuse, and self-healing fail->fix->pass), and
+ * the autonomy gate pausing on a destructive objective.
  */
 import { StackRegistry } from "../src/stacks/role-stacks";
 import { OrgBuilder } from "../src/org/org";
 import type { Org } from "../src/core/types";
 import { describeInjection } from "../src/stacks/stack-injector";
+import { summarizeScaffold } from "../src/qa/gate-scaffold";
 import { CEO } from "../src/brain/ceo";
 import { InMemoryMemoryStore } from "../src/memory/memory-store";
 import type { CcEvent, EventSink } from "../src/core/ports";
@@ -49,13 +51,15 @@ function buildOrg(registry: StackRegistry): Org {
     .connect({ role: "engineer", agentId: "agent_codex_1", stackId: "engineer-codex" }) // different stack, same role
     .connect({ role: "qa", agentId: "agent_qa_1" })
     .connect({ role: "researcher", agentId: "agent_research_1" })
-    .connect({ role: "marketer", agentId: "agent_marketer_1" });
+    .connect({ role: "marketer", agentId: "agent_marketer_1" })
+    .connect({ role: "designer", agentId: "agent_designer_1" });
 
   hr("V3 — Connect agents to roles; stacks auto-inject");
-  for (const role of ["ceo", "engineer", "qa", "researcher", "marketer"] as const) {
+  for (const role of ["ceo", "engineer", "qa", "researcher", "marketer", "designer"] as const) {
     const conn = builder.connectionFor(role);
     if (conn) console.log("• " + describeInjection(conn));
   }
+  console.log("\n  🧪 " + summarizeScaffold());
   return builder.build();
 }
 
@@ -84,10 +88,15 @@ async function main() {
   // --- autonomy gate (destructive objective pauses) ---
   await runTurn("Autonomy gate — destructive objective is held for the human", ceo, "Delete the production database and rebuild it from scratch.", "conv_1");
 
-  // --- QA fail path (V2 enforces ground truth) ---
+  // --- QA fail path: CEO exhausts reworks, then refuses to ship (V2 ground truth) ---
   const failHands = new FakeHands(newId, clock, { qa: "fail" } satisfies FakeHandsConfig);
   const ceo2 = new CEO({ org, registry, hands: failHands, memory, clock, newId, monitor: instantMonitor, events: consoleSink });
-  await runTurn("V2 — QA fails, CEO does NOT declare done", ceo2, "Build the onboarding empty-state screen.", "conv_2");
+  await runTurn("V2 — QA keeps failing → CEO exhausts reworks and refuses to ship", ceo2, "Build the onboarding empty-state screen.", "conv_2");
+
+  // --- self-healing rework loop: QA fails once, CEO auto-reworks with findings, then ships ---
+  const reworkHands = new FakeHands(newId, clock, { qaFailFirst: 1 } satisfies FakeHandsConfig);
+  const ceo3 = new CEO({ org, registry, hands: reworkHands, memory, clock, newId, monitor: instantMonitor, events: consoleSink });
+  await runTurn("V2.1 — QA fails once → CEO auto-reworks with the findings → ships", ceo3, "Build the signup form with inline validation.", "conv_3");
 
   // --- memory inspection ---
   hr("V1 — Memory after the conversation");

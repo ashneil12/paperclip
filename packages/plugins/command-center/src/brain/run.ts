@@ -6,7 +6,8 @@
  * advances one tick per /chat/poll, and returns without blocking). A tick:
  *   1. dispatch every ready task (deps done) — gating destructive ones,
  *   2. collect terminal results for dispatched tasks,
- *   3. drive the QA verify gate for done+needsQA tasks,
+ *   3. drive the QA verify gate for done+needsQA tasks (auto-reworking a FAIL back
+ *      to the role with the QA findings baked in, up to maxRework attempts),
  *   4. mark tasks blocked when an upstream dep failed,
  * then report whether the whole run is finished.
  */
@@ -30,6 +31,8 @@ export interface RunDeps {
   autonomy?: AutonomyConfig;
   events?: EventSink;
   posture?: AutonomyPosture;
+  /** Max QA-fail auto-rework attempts before a task settles as failed. Default 2. */
+  maxRework?: number;
 }
 
 export function newRunState(conversationId: string, objectiveText: string, plan: Plan): RunState {
@@ -41,6 +44,8 @@ export function newRunState(conversationId: string, objectiveText: string, plan:
     results: {},
     verdicts: {},
     qaIssues: {},
+    reworks: {},
+    reworkNotes: {},
     gated: [],
     awaitingHuman: false,
     done: false,
@@ -52,6 +57,7 @@ export async function advanceRun(state: RunState, deps: RunDeps): Promise<{ chan
   const { org, registry, hands, newId, events } = deps;
   const autonomy = deps.autonomy ?? DEFAULT_AUTONOMY;
   const posture = deps.posture ?? "act-then-report";
+  const maxRework = deps.maxRework ?? 2;
   const ceo = ceoOf(org);
   let changed = false;
 
@@ -84,7 +90,10 @@ export async function advanceRun(state: RunState, deps: RunDeps): Promise<{ chan
     }
 
     const depIssueIds = task.dependsOn.map((d) => state.dispatched[d]).filter((x): x is string => Boolean(x));
-    const dispatch = await dispatchTask(task, depIssueIds, { hands, registry, org, newId, ceoAgentId: ceo.agentId });
+    // On a rework pass, the QA findings ride along in the brief so the worker fixes them.
+    const reworkNote = state.reworkNotes?.[task.id];
+    const toDispatch = reworkNote ? { ...task, description: `${task.description}\n\n${reworkNote}` } : task;
+    const dispatch = await dispatchTask(toDispatch, depIssueIds, { hands, registry, org, newId, ceoAgentId: ceo.agentId });
     state.dispatched[task.id] = dispatch.issueId;
     events?.emit({ type: "task.dispatched", taskId: task.id, issueId: dispatch.issueId, role: dispatch.role });
     changed = true;
@@ -128,8 +137,24 @@ export async function advanceRun(state: RunState, deps: RunDeps): Promise<{ chan
     } else {
       const verdict = await collectQaVerdict(task.id, state.qaIssues[task.id]!, hands);
       if (verdict) {
-        state.verdicts[task.id] = verdict;
-        events?.emit({ type: "qa.verdict", taskId: task.id, passed: verdict.passed });
+        const attempts = state.reworks?.[task.id] ?? 0;
+        if (!verdict.passed && attempts < maxRework) {
+          // Self-healing gate: a QA FAIL re-dispatches the task to its role with the
+          // findings baked into the brief, then re-verifies — instead of stopping at "needs rework".
+          state.reworks = state.reworks ?? {};
+          state.reworkNotes = state.reworkNotes ?? {};
+          const next = attempts + 1;
+          state.reworks[task.id] = next;
+          state.reworkNotes[task.id] = reworkBrief(next, maxRework, verdict.findings);
+          delete state.dispatched[task.id];
+          delete state.results[task.id];
+          delete state.qaIssues[task.id];
+          events?.emit({ type: "task.progress", taskId: task.id, text: `QA FAIL → re-dispatching to ${task.role} with findings (attempt ${next}/${maxRework}).` });
+        } else {
+          // Passed, or out of rework attempts — settle the verdict (authoritative).
+          state.verdicts[task.id] = verdict;
+          events?.emit({ type: "qa.verdict", taskId: task.id, passed: verdict.passed });
+        }
         changed = true;
       }
     }
@@ -140,6 +165,20 @@ export async function advanceRun(state: RunState, deps: RunDeps): Promise<{ chan
 }
 
 // --- helpers --------------------------------------------------------------
+/** The rework brief appended to a re-dispatched task after a QA FAIL. */
+function reworkBrief(attempt: number, max: number, findings: string[]): string {
+  const list = findings.length
+    ? findings.map((f) => `- ${f}`).join("\n")
+    : "- (QA enumerated no specific findings — re-verify every acceptance criterion.)";
+  return [
+    `## Rework (attempt ${attempt} of ${max})`,
+    "The QA gate FAILED the previous attempt. Fix each finding below, then it will be re-verified. Do not expand scope.",
+    "",
+    "### QA findings to address",
+    list,
+  ].join("\n");
+}
+
 function isGated(state: RunState, taskId: string): boolean {
   return state.gated.some((g) => g.taskId === taskId);
 }
