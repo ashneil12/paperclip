@@ -1,13 +1,15 @@
 /**
- * Paperclip plugin manifest (PLUGIN_SPEC §10.1). Additive: a page slot for the
- * chat surface + JSON API routes for the CEO brain. No core edits. The CEO
- * persona ships as a managed skill so the host can mount it.
+ * Paperclip plugin manifest. Additive: a page slot for the chat surface + JSON API
+ * routes for the CEO brain. Validated against the real host schema (PLUGIN_SPEC +
+ * packages/shared validators): lowercase id, routes carry `auth` + the
+ * `api.routes.register` capability, `plugin.state.*` for ctx.state, `ui.page.register`
+ * for the page slot. The CEO persona is injected via the role stack, not declared as
+ * a managed skill, so no `skills` block is needed.
  */
 import type { PaperclipPluginManifestV1 } from "../sdk";
-import { CEO_SYSTEM_PROMPT } from "../stacks/operatoros-stack";
 
 export const manifest: PaperclipPluginManifestV1 = {
-  id: "@ash/command-center",
+  id: "command-center",
   apiVersion: 1,
   version: "0.1.0",
   displayName: "Command Center",
@@ -15,8 +17,12 @@ export const manifest: PaperclipPluginManifestV1 = {
     "A chatable CEO that decomposes objectives, dispatches them to your agent fleet under Paperclip's budgets + audit, auto-injects per-role stacks (OperatorOS for the CEO), and verifies its own work before declaring done.",
   author: "Ash",
   categories: ["automation", "ui"],
-  minimumHostVersion: "2026.6.0",
   capabilities: [
+    "api.routes.register",
+    "ui.page.register",
+    "plugin.state.read",
+    "plugin.state.write",
+    "agents.read",
     "issues.read",
     "issues.create",
     "issues.update",
@@ -24,16 +30,15 @@ export const manifest: PaperclipPluginManifestV1 = {
     "issue.comments.read",
     "issue.comments.create",
     "issue.interactions.create",
-    "skills.managed",
   ],
-  entrypoints: { worker: "./dist/host/worker.js", ui: "./dist/ui/" },
+  entrypoints: { worker: "./dist/host/worker.js", ui: "./dist/ui" },
   instanceConfigSchema: {
     type: "object",
     properties: {
       defaultGoalId: { type: "string", description: "Goal that all dispatched work hangs under (ancestry)." },
       roster: {
         type: "array",
-        description: "Which agent fills which role. The CEO seat auto-injects OperatorOS.",
+        description: "Which agent fills which role. The CEO seat auto-injects OperatorOS; solo mode self-staffs the rest.",
         items: {
           type: "object",
           required: ["role", "agentId"],
@@ -47,22 +52,14 @@ export const manifest: PaperclipPluginManifestV1 = {
     },
   },
   apiRoutes: [
-    { routeKey: "chat", method: "POST", path: "/chat", capabilities: ["issues.create", "issues.wakeup", "issue.comments.create"] },
-    { routeKey: "poll", method: "GET", path: "/poll", capabilities: ["issues.read", "issue.comments.read"] },
-    { routeKey: "roster", method: "GET", path: "/roster" },
+    { routeKey: "chat", method: "POST", path: "/chat", auth: "board", capability: "api.routes.register", companyResolution: { from: "body", key: "companyId" } },
+    { routeKey: "poll", method: "GET", path: "/poll", auth: "board", capability: "api.routes.register", companyResolution: { from: "query", key: "companyId" } },
+    { routeKey: "roster", method: "GET", path: "/roster", auth: "board", capability: "api.routes.register", companyResolution: { from: "query", key: "companyId" } },
     // Autonomous backlog loop (standing objectives the CEO works while you sleep).
-    { routeKey: "enqueue", method: "POST", path: "/enqueue" },
-    { routeKey: "backlog", method: "GET", path: "/backlog" },
-    { routeKey: "tick", method: "POST", path: "/tick", capabilities: ["issues.create", "issues.wakeup", "issue.comments.create"] },
-    { routeKey: "briefing", method: "GET", path: "/briefing" },
-  ],
-  skills: [
-    {
-      key: "command-center-ceo",
-      displayName: "Command Center CEO",
-      description: "OperatorOS persona + the dispatch/verify/report protocol for the CEO seat.",
-      body: CEO_SYSTEM_PROMPT,
-    },
+    { routeKey: "enqueue", method: "POST", path: "/enqueue", auth: "board", capability: "api.routes.register", companyResolution: { from: "body", key: "companyId" } },
+    { routeKey: "backlog", method: "GET", path: "/backlog", auth: "board", capability: "api.routes.register", companyResolution: { from: "query", key: "companyId" } },
+    { routeKey: "tick", method: "POST", path: "/tick", auth: "board", capability: "api.routes.register", companyResolution: { from: "body", key: "companyId" } },
+    { routeKey: "briefing", method: "GET", path: "/briefing", auth: "board", capability: "api.routes.register", companyResolution: { from: "query", key: "companyId" } },
   ],
   ui: {
     slots: [

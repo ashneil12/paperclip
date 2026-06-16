@@ -22,7 +22,7 @@
  * once in the roster) and it self-staffs every other role with that same session.
  */
 import { randomUUID } from "node:crypto";
-import { definePlugin, runWorker, type PluginApiRequestInput, type PluginContext } from "../sdk";
+import { definePlugin, type PluginApiRequestInput, type PluginContext } from "../sdk";
 import type { Clock, IdGen } from "../core/ports";
 import type { Org, RoleId, RoleStack } from "../core/types";
 import { StackRegistry } from "../stacks/role-stacks";
@@ -51,25 +51,39 @@ interface CcConfig {
 
 let context: PluginContext | null = null;
 
-function buildOrg(registry: StackRegistry, companyId: string, cfg: CcConfig): Org {
-  const roster = cfg.roster ?? [];
+function buildOrg(registry: StackRegistry, companyId: string, roster: RosterEntry[], defaultGoalId?: string): Org {
   if (roster.length === 0) {
-    throw new Error("No roster configured. Connect an agent and add it to the plugin config roster as the 'ceo'.");
+    throw new Error("No agent available. Connect + approve an agent in Paperclip (it becomes the CEO automatically), or set a roster in the plugin config.");
   }
-  // If no explicit CEO, promote the first connected agent — so a single roster entry just works.
+  // If no explicit CEO, promote the first entry — so a single agent just works.
   const hasCeo = roster.some((e) => e.role === "ceo");
   const first = roster[0]!;
   const entries: RosterEntry[] = hasCeo ? roster : [{ role: "ceo", agentId: first.agentId, stackId: first.stackId }, ...roster.slice(1)];
 
-  const builder = new OrgBuilder(registry, companyId, cfg.defaultGoalId); // solo on by default
+  const builder = new OrgBuilder(registry, companyId, defaultGoalId); // solo on by default
   for (const e of entries) builder.connect({ role: e.role, agentId: e.agentId, stackId: e.stackId });
   return builder.build();
 }
 
-function makeCeo(ctx: PluginContext, companyId: string, cfg: CcConfig) {
+/**
+ * The effective roster: the configured one, or — when none is set — auto-discovered
+ * from the company's agents (prefer a claude_local agent). So connecting ONE agent
+ * "just works" with zero config. (Company-scoped plugin config isn't available in
+ * this host build yet, which makes auto-discovery the primary path.)
+ */
+async function resolveRoster(ctx: PluginContext, companyId: string, cfg: CcConfig): Promise<RosterEntry[]> {
+  if (cfg.roster && cfg.roster.length > 0) return cfg.roster;
+  const agents = await ctx.agents.list({ companyId });
+  const usable = agents.filter((a) => a.status !== "terminated" && a.status !== "pending_approval");
+  const pick = usable.find((a) => a.adapterType === "claude_local") ?? usable[0];
+  return pick ? [{ role: "ceo", agentId: pick.id }] : [];
+}
+
+async function makeCeo(ctx: PluginContext, companyId: string, cfg: CcConfig) {
   const registry = new StackRegistry();
   for (const s of cfg.stacks ?? []) registry.register(s); // custom stacks per member
-  const org = buildOrg(registry, companyId, cfg);
+  const roster = await resolveRoster(ctx, companyId, cfg);
+  const org = buildOrg(registry, companyId, roster, cfg.defaultGoalId);
   const ceoMember = org.members.find((m) => m.role === "ceo")!;
   const ceoStack = registry.get(ceoMember.stackId);
   const hands = new PaperclipHands(ctx.issues, companyId);
@@ -89,7 +103,7 @@ async function tickBacklog(ctx: PluginContext, companyId: string, cfg: CcConfig)
   if (next === undefined) return null;
   await backlog.save(queue.slice(1));
 
-  const { ceo } = makeCeo(ctx, companyId, cfg);
+  const { ceo } = await makeCeo(ctx, companyId, cfg);
   const reply = await ceo.handleObjective(next, `backlog_${newId("c")}`, "operator-loop");
   const entry: BriefingEntry = { objective: next, reply, spend: reply.spend };
   await new BriefingStore(ctx.state, companyId).append(entry);
@@ -128,14 +142,15 @@ const plugin = definePlugin({
 
     try {
       if (input.routeKey === "roster") {
-        return { body: { roster: cfg.roster ?? [], soloMode: true } };
+        const roster = await resolveRoster(ctx, companyId, cfg);
+        return { body: { roster, soloMode: true, autoDiscovered: !(cfg.roster && cfg.roster.length > 0) } };
       }
 
       if (input.routeKey === "chat") {
         const body = (input.body ?? {}) as { message?: string; conversationId?: string };
         if (!body.message) return { status: 400, body: { error: "message is required" } };
         const conversationId = body.conversationId ?? newId("conv");
-        const { ceo, memory, runStore } = makeCeo(ctx, companyId, cfg);
+        const { ceo, memory, runStore } = await makeCeo(ctx, companyId, cfg);
 
         let mem = await memory.load(conversationId);
         mem = appendTurn(mem, "user", body.message, clock.iso());
@@ -150,7 +165,7 @@ const plugin = definePlugin({
       if (input.routeKey === "poll") {
         const conversationId = String(input.query.conversationId ?? "");
         if (!conversationId) return { status: 400, body: { error: "conversationId is required" } };
-        const { ceo, memory, runStore, memPolicy } = makeCeo(ctx, companyId, cfg);
+        const { ceo, memory, runStore, memPolicy } = await makeCeo(ctx, companyId, cfg);
         const run = await runStore.load(conversationId);
         if (!run) return { status: 404, body: { error: "no active run for that conversation" } };
 
@@ -209,4 +224,14 @@ const plugin = definePlugin({
 });
 
 export default plugin;
-runWorker(plugin, import.meta.url);
+
+// Boot via the REAL host SDK at runtime. A non-literal specifier keeps the SDK and
+// its transitive @paperclipai/shared SOURCE out of this package's typecheck graph;
+// top-level await registers the plugin before the host's initialize RPC arrives.
+// runWorker's own isWorkerEntrypoint guard makes this a no-op if the host merely
+// imports this module instead of spawning it as `node worker.js`.
+const __sdkSpecifier = "@paperclipai/plugin-sdk";
+const { runWorker: hostRunWorker } = (await import(__sdkSpecifier)) as {
+  runWorker: (p: unknown, entryUrl: string) => unknown;
+};
+hostRunWorker(plugin, import.meta.url);

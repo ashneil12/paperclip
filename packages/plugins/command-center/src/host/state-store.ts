@@ -18,7 +18,7 @@ export class PaperclipMemoryStore implements MemoryStore {
   }
 
   async save(memory: ConversationMemory): Promise<void> {
-    await this.state.set({ ...this.key(`mem:${memory.conversationId}`), value: memory });
+    await this.state.set(this.key(`mem:${memory.conversationId}`), memory);
   }
 
   private key(stateKey: string) {
@@ -36,11 +36,11 @@ export class RunStateStore {
   }
 
   async save(run: RunState): Promise<void> {
-    await this.state.set({ ...this.key(run.conversationId), value: run });
+    await this.state.set(this.key(run.conversationId), run);
   }
 
   async clear(conversationId: string): Promise<void> {
-    await this.state.set({ ...this.key(conversationId), value: null });
+    await this.state.set(this.key(conversationId), null);
   }
 
   private key(conversationId: string) {
@@ -56,7 +56,7 @@ export class BacklogStore {
     return Array.isArray(raw) ? (raw as string[]) : [];
   }
   async save(queue: string[]): Promise<void> {
-    await this.state.set({ ...this.key(), value: queue });
+    await this.state.set(this.key(), queue);
   }
   private key() {
     return { scopeKind: "company", scopeId: this.companyId, stateKey: "command-center:backlog" };
@@ -73,10 +73,10 @@ export class BriefingStore {
   async append(entry: BriefingEntry): Promise<void> {
     const all = await this.load();
     all.push(entry);
-    await this.state.set({ ...this.key(), value: all });
+    await this.state.set(this.key(), all);
   }
   async clear(): Promise<void> {
-    await this.state.set({ ...this.key(), value: [] });
+    await this.state.set(this.key(), []);
   }
   private key() {
     return { scopeKind: "company", scopeId: this.companyId, stateKey: "command-center:briefing" };

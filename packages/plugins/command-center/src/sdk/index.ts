@@ -47,9 +47,12 @@ export interface PaperclipPluginManifestV1 {
 
 export interface PluginApiRouteDeclaration {
   routeKey: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  path: string; // e.g. "/chat" or "/sessions/:sessionId"
-  capabilities?: string[];
+  method: "GET" | "POST" | "PATCH" | "DELETE";
+  path: string; // e.g. "/chat" or "/issues/:issueId/smoke"
+  auth: "board" | "agent" | "board-or-agent" | "webhook";
+  capability: "api.routes.register";
+  checkoutPolicy?: "none" | "required-for-agent-in-progress" | "always-for-agent";
+  companyResolution?: { from: "body" | "query"; key: string } | { from: "issue"; param: string };
 }
 export interface PluginManagedAgentDeclaration {
   key: string;
@@ -131,14 +134,33 @@ export interface PluginLogger {
   warn(msg: string, meta?: unknown): void;
   error(msg: string, meta?: unknown): void;
 }
+export interface PluginScopeKey {
+  scopeKind: string;
+  scopeId: string;
+  stateKey: string;
+  namespace?: string;
+}
 export interface PluginStateClient {
-  get(input: { scopeKind: string; scopeId: string; stateKey: string }): Promise<unknown>;
-  set(input: { scopeKind: string; scopeId: string; stateKey: string; value: unknown }): Promise<void>;
+  get(input: PluginScopeKey): Promise<unknown>;
+  /** value is a SEPARATE second argument (matches the real SDK). */
+  set(input: PluginScopeKey, value: unknown): Promise<void>;
+  delete(input: PluginScopeKey): Promise<void>;
+}
+export interface PluginAgentLike {
+  id: string;
+  name?: string;
+  status?: string;
+  adapterType?: string;
+}
+export interface PluginAgentsClient {
+  list(input: { companyId: string; status?: string; limit?: number; offset?: number }): Promise<PluginAgentLike[]>;
+  get(agentId: string, companyId: string): Promise<PluginAgentLike | null>;
 }
 export interface PluginContext {
   manifest: PaperclipPluginManifestV1;
   logger: PluginLogger;
   issues: PluginIssuesClient;
+  agents: PluginAgentsClient;
   state: PluginStateClient;
   config: { get(): Promise<Record<string, unknown>> };
   secrets: { resolve(ref: string): Promise<string> };
@@ -174,8 +196,10 @@ export interface PluginDefinition {
   onHealth?(): Promise<PluginHealthDiagnostics>;
 }
 
-export function definePlugin(def: PluginDefinition): PluginDefinition {
-  return def;
+/** Mirrors the real SDK: wrap the definition as a PaperclipPlugin (`{ definition }`).
+ * runWorker reads `plugin.definition.setup`, so the wrapper is load-bearing. */
+export function definePlugin(def: PluginDefinition): { definition: PluginDefinition } {
+  return { definition: def };
 }
 export function runWorker(plugin: PluginDefinition, entryUrl: string): void {
   // In-tree: hand off to the REAL host SDK at runtime. A non-literal specifier keeps
