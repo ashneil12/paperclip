@@ -70,7 +70,7 @@ export const manifest: PaperclipPluginManifestV1 = {
         displayName: "Command Center",
         description: "Chat with your CEO",
         placementZone: "sidebar",
-        action: { type: "navigate", target: "/command-center" },
+        action: { type: "navigate", target: "command-center" },
       },
     ],
     slots: [
