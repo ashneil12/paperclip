@@ -150,16 +150,27 @@ const plugin = definePlugin({
         const body = (input.body ?? {}) as { message?: string; conversationId?: string };
         if (!body.message) return { status: 400, body: { error: "message is required" } };
         const conversationId = body.conversationId ?? newId("conv");
-        const { ceo, memory, runStore } = await makeCeo(ctx, companyId, cfg);
+        const { ceo, memory, runStore, memPolicy } = await makeCeo(ctx, companyId, cfg);
 
         let mem = await memory.load(conversationId);
         mem = appendTurn(mem, "user", body.message, clock.iso());
         await memory.save(mem);
 
+        // Intent gate: greetings / questions / small talk get a reply, not a task.
+        const intent = await ceo.classify(body.message);
+        if (intent === "conversation") {
+          const reply = await ceo.chat(body.message, conversationId);
+          mem = await memory.load(conversationId);
+          mem = appendTurn(mem, "ceo", reply, clock.iso());
+          mem = compactIfNeeded(mem, memPolicy);
+          await memory.save(mem);
+          return { status: 200, body: { conversationId, report: reply, done: true, awaitingHuman: false, kind: "chat" } };
+        }
+
         const run = await ceo.startRun(body.message, conversationId, input.actor.userId ?? "operator");
         const { done } = await ceo.tick(run);
         await runStore.save(run);
-        return { status: 201, body: { conversationId, plan: run.plan, report: ceo.report(run), done, awaitingHuman: run.awaitingHuman } };
+        return { status: 201, body: { conversationId, plan: run.plan, report: ceo.report(run), done, awaitingHuman: run.awaitingHuman, kind: "run" } };
       }
 
       if (input.routeKey === "poll") {

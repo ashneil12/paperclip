@@ -24,6 +24,8 @@ import { synthesizeReport } from "./reporter";
 import { appendTurn, compactIfNeeded, type MemoryPolicy } from "../memory/memory-store";
 import { advanceRun, newRunState, runMaps, type RunDeps } from "./run";
 import { estimateRunSpend } from "./cost";
+import { classifyIntent, conversationalReply, type Intent } from "./intent";
+import { renderContext } from "../memory/memory-store";
 
 export interface CeoDeps {
   org: Org;
@@ -54,6 +56,22 @@ export class CEO {
     if (this.deps.org.soloFallback === false) return connected;
     const all = this.deps.registry.list().map((s) => s.role).filter((r) => r !== "ceo");
     return Array.from(new Set([...connected, ...all]));
+  }
+
+  /** Is this message real work to dispatch, or just conversation? */
+  async classify(text: string): Promise<Intent> {
+    return classifyIntent(text, this.deps.llm);
+  }
+
+  /** A conversational reply in the CEO's (OperatorOS) voice — no dispatch. */
+  async chat(text: string, conversationId?: string): Promise<string> {
+    const ceoStack = this.deps.registry.get(ceoOf(this.deps.org).stackId);
+    let contextSummary: string | undefined;
+    if (conversationId) {
+      const mem = await this.deps.memory.load(conversationId);
+      contextSummary = mem.turns.length || mem.summary ? renderContext(mem) : undefined;
+    }
+    return conversationalReply(text, { llm: this.deps.llm, persona: ceoStack?.persona, contextSummary });
   }
 
   private runDeps(): RunDeps {
