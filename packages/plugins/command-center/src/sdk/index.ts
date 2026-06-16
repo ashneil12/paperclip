@@ -30,6 +30,17 @@ export interface PaperclipPluginManifestV1 {
   agents?: PluginManagedAgentDeclaration[];
   skills?: PluginManagedSkillDeclaration[];
   ui?: {
+    launchers?: Array<{
+      id: string;
+      displayName: string;
+      description?: string;
+      placementZone: string;
+      exportName?: string;
+      entityTypes?: string[];
+      order?: number;
+      action: { type: string; target: string; params?: Record<string, unknown> };
+      render?: unknown;
+    }>;
     slots: Array<{
       type:
         | "page" | "detailTab" | "taskDetailView" | "dashboardWidget" | "sidebar"

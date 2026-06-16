@@ -28,7 +28,7 @@ function replaceLastCeo(messages: Message[], text: string): Message[] {
   return [...out, { role: "ceo", text }];
 }
 
-export function CeoChat() {
+export function CeoChat({ companyId }: { companyId?: string | null }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,13 +37,13 @@ export function CeoChat() {
   const poll = useCallback(async (convId: string) => {
     for (let i = 0; i < 120; i++) {
       await sleep(1500);
-      const res = await fetch(`${API_BASE}/poll?conversationId=${encodeURIComponent(convId)}`);
+      const res = await fetch(`${API_BASE}/poll?conversationId=${encodeURIComponent(convId)}&companyId=${encodeURIComponent(companyId ?? "")}`);
       if (!res.ok) break;
       const data = (await res.json()) as { report: string; done: boolean };
       setMessages((m) => replaceLastCeo(m, data.report));
       if (data.done) break;
     }
-  }, []);
+  }, [companyId]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -55,7 +55,7 @@ export function CeoChat() {
       const res = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: text, conversationId: conversationId.current }),
+        body: JSON.stringify({ message: text, conversationId: conversationId.current, companyId }),
       });
       const data = (await res.json()) as { conversationId: string; report: string; done: boolean };
       conversationId.current = data.conversationId;
@@ -66,7 +66,7 @@ export function CeoChat() {
     } finally {
       setBusy(false);
     }
-  }, [input, busy, poll]);
+  }, [input, busy, poll, companyId]);
 
   return (
     <div style={styles.wrap}>

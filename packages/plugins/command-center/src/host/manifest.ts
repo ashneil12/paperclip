@@ -20,6 +20,7 @@ export const manifest: PaperclipPluginManifestV1 = {
   capabilities: [
     "api.routes.register",
     "ui.page.register",
+    "ui.sidebar.register",
     "plugin.state.read",
     "plugin.state.write",
     "agents.read",
@@ -62,6 +63,16 @@ export const manifest: PaperclipPluginManifestV1 = {
     { routeKey: "briefing", method: "GET", path: "/briefing", auth: "board", capability: "api.routes.register", companyResolution: { from: "query", key: "companyId" } },
   ],
   ui: {
+    // Sidebar nav entry so the page is discoverable (a `page` slot alone has no link).
+    launchers: [
+      {
+        id: "command-center-nav",
+        displayName: "Command Center",
+        description: "Chat with your CEO",
+        placementZone: "sidebar",
+        action: { type: "navigate", target: "/command-center" },
+      },
+    ],
     slots: [
       { type: "page", id: "command-center", displayName: "Command Center", exportName: "CommandCenterPage", routePath: "command-center" },
     ],
