@@ -58,6 +58,14 @@ export function synthesizeReport(input: ReportInput): string {
   }
 
   lines.push("\n**Next moves**\n" + nextMoves(shipped.length, failed.length, asks.length, byId).join("\n"));
+
+  // Visible signal when the CEO planned with rules instead of the model (auth/model issue).
+  if (/heuristic/i.test(plan.rationale)) {
+    lines.push(
+      "\n_⚠ Planned without the model — the CEO's `claude` brain isn't authenticated in this server, " +
+        "so it fell back to rule-based planning. Run the server where `claude` is logged in (or set ANTHROPIC_API_KEY) to make it actually reason._",
+    );
+  }
   return lines.join("\n");
 }
 

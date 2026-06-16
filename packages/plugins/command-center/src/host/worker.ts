@@ -89,7 +89,10 @@ async function makeCeo(ctx: PluginContext, companyId: string, cfg: CcConfig) {
   const hands = new PaperclipHands(ctx.issues, companyId);
   const memory = new PaperclipMemoryStore(ctx.state, companyId);
   const runStore = new RunStateStore(ctx.state, companyId);
-  const llm = new ClaudeCliLLM({ model: ceoStack?.model });
+  // No explicit --model: use whatever the logged-in `claude` defaults to (the stack's
+  // display id like "claude-opus-4-8" isn't a CLI alias and would error). The stack
+  // model still drives spend estimates + the worker agents' adapter overrides.
+  const llm = new ClaudeCliLLM();
   const ceo = new CEO({ org, registry, hands, memory, clock, newId, llm, monitor: { maxPolls: 1, sleep: async () => {} } });
   const memPolicy: MemoryPolicy = ceoStack?.memory ?? { retainTurns: 24, summarizeAfterTurns: 40 };
   return { ceo, memory, runStore, memPolicy };
