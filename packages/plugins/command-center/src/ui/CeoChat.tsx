@@ -7,7 +7,8 @@
  */
 import React, { useCallback, useRef, useState } from "react";
 
-const PLUGIN_ID = "@ash/command-center";
+// Must match the manifest `id` — the host mounts routes at /api/plugins/<id>/api/*.
+const PLUGIN_ID = "command-center";
 const API_BASE = `/api/plugins/${encodeURIComponent(PLUGIN_ID)}/api`;
 
 interface Message {
